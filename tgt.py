@@ -12,56 +12,28 @@ import fnmatch
 import re
 import sys
 import pathlib
+import ast
 
 logging.basicConfig(level=logging.INFO)
 # logging.basicConfig(level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
-TARGET_REX = re.compile("(?x)((?P<engine>P|L|)@)?(?P<pattern>.+)$")
-
-
-def list_match(tgt, minion_id=None) -> bool:
-    """
-    Determines if this host is on the list
-    """
-
-    try:
-        if (
-            ",{},".format(minion_id) in tgt
-            or tgt.startswith(minion_id + ",")
-            or tgt.endswith("," + minion_id)
-        ):
-            return True
-        return minion_id == tgt
-    except (AttributeError, TypeError):
-        try:
-            return minion_id in tgt
-        except Exception:
-            return False
-
-    logger.warning(
-        "List matcher unexpectedly did not return, for target %s, "
-        "this is probably a bug.",
-        tgt,
-    )
-    return False
-
+TARGET_RE = re.compile("(?x)((?P<engine>P|L|)@)?(?P<pattern>.+)$")
 
 def match(tgt: str, host: str) -> bool:
     # L: list
     # E: pcre
     # G: glob
-    
 
-    results = [] # type: List[str]
+    results = []  # type: List[str]
     opers = ["and", "or", "not", "(", ")"]
 
-    words = tgt.split()
+    words = tgt.split(" ")
 
     while words:
         word = words.pop(0)
 
-        match = TARGET_REX.match(word)
+        match = TARGET_RE.match(word)
         if not match:
             logger.warning('Unable to parse target "%s"', tgt)
             target_info = {
@@ -71,40 +43,26 @@ def match(tgt: str, host: str) -> bool:
         else:
             target_info = match.groupdict()
 
-        # Easy check first
         if word in opers:
-            if results:
-                if results[-1] == "(" and word in ("and", "or"):
-                    logger.error('Invalid beginning operator after "(": %s', word)
-                    return False
-                if word == "not":
-                    if not results[-1] in ("and", "or", "("):
-                        results.append("and")
-                results.append(word)
-            else:
-                # seq start with binary oper, fail
-                if word not in ["(", "not"]:
-                    logger.error("Invalid beginning operator: %s", word)
-                    return False
-                results.append(word)
-
+            results.append(word)
         elif target_info["engine"] == "L":
-            results.append(str(list_match(target_info["pattern"], host)))
+            results.append(str(host in target_info["pattern"].split(",")))
         elif target_info["engine"] == "P":
             results.append(str(bool(re.match(target_info["pattern"], host))))
         else:
             results.append(str(fnmatch.fnmatch(host, word)))
 
-    results_str = " ".join(results)
+    result_parse = ast.parse(" ".join(results), filename="", mode="eval")
 
-    logger.debug('compound_match %s ? "%s" => "%s"', host, tgt, results_str)
+    logger.debug('compound_match %s ? "%s" => "%s"', host, tgt, ast.dump(result_parse))
 
-    try:
-        return eval(results_str)
-    except Exception:
-        logger.error("Invalid compound target: %s for results: %s", tgt, results_str)
-    return False
-
+    if isinstance(result_parse.body, ast.BoolOp):
+        return eval(compile(result_parse, filename="", mode="eval"))
+    elif isinstance(result_parse.body, ast.Constant):
+        if isinstance(result_parse.body.value, bool):
+            return eval(compile(result_parse, filename="", mode="eval"))
+    else:
+        return False
 
 async def find_host(tgt: str, hostkey_file: pathlib.Path) -> AsyncGenerator[str, None]:
     with open(hostkey_file.expanduser(), "r") as known_hosts:
