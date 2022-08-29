@@ -20,6 +20,12 @@ logger = logging.getLogger(__name__)
 
 TARGET_RE = re.compile("(?x)((?P<engine>P|L|)@)?(?P<pattern>.+)$")
 
+class bcolors:
+    GREEN = '\033[0;32m'
+    RED = '\033[0;31m'
+    ENDC = '\033[0m'
+
+
 def match(tgt: str, host: str) -> bool:
     # L: list
     # E: pcre
@@ -97,12 +103,11 @@ async def ssh(
         stdout, stderr = await proc.communicate()
 
         if proc.returncode != 0:
-            logger.info("stderr %s\n%s", host, stderr.decode("utf-8"))
+            logger.info("%s stderr %s\n%s %s", bcolors.RED, host, stderr.decode("utf-8"), bcolors.ENDC)
         else:
-            logger.info("stdout %s\n%s", host, stdout.decode("utf-8"))
+            logger.info("%s stdout %s\n%s %s", bcolors.GREEN, host, stdout.decode("utf-8"), bcolors.ENDC)
 
-
-async def main() -> None:
+def get_main_parser():
     parser = argparse.ArgumentParser(description="host to connect")
     parser.add_argument(
         "--tgt",
@@ -136,9 +141,12 @@ async def main() -> None:
         dest="dryrun",
         default=False,
         action="store_true",
-        help="hostkey",
+        help="dry-run",
     )
-    args, ssh_options = parser.parse_known_args()
+    return parser
+
+async def main() -> None:
+    args, ssh_options = get_main_parser().parse_known_args()
 
     logger.info("start")
 
