@@ -151,10 +151,18 @@ async def main() -> None:
     logger.info("start")
 
     tasks = []
+    hosts = []
     sem = asyncio.Semaphore(args.parallelism)
 
     async for h in find_host(tgt=args.tgt, hostkey_file=args.hostkey):
+        if h in hosts:
+            #skip duplicate
+            continue
+        else:
+            hosts.append(h)
+
         logger.info("found %s", h)
+
         tasks.append(
             asyncio.create_task(
                 ssh(
