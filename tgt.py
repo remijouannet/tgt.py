@@ -28,7 +28,7 @@ class bcolors:
 
 def match(tgt: str, host: str) -> bool:
     # L: list
-    # E: pcre
+    # P: pcre
     # G: glob
 
     results = []  # type: List[str]
