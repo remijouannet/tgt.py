@@ -70,13 +70,18 @@ def match(tgt: str, host: str) -> bool:
     else:
         return False
 
-async def find_host(tgt: str, hostkey_file: pathlib.Path) -> AsyncGenerator[str, None]:
-    with open(hostkey_file.expanduser(), "r") as known_hosts:
-        for hostkey in known_hosts.readlines():
-            # every line can contain hostname1 or hostname1,hostname2,hostname3
-            for h in hostkey.strip().split(" ")[0].split(","):
-                if match(tgt=tgt, host=h):
-                    yield h
+async def find_host(tgt: str, list: str, hostkey_file: pathlib.Path) -> AsyncGenerator[str, None]:
+    if list:
+        with open(list, "r") as f:
+            for h in f.readlines():
+                yield h.strip()
+    elif tgt:
+        with open(hostkey_file.expanduser(), "r") as known_hosts:
+            for hostkey in known_hosts.readlines():
+                # every line can contain hostname1 or hostname1,hostname2,hostname3
+                for h in hostkey.strip().split(" ")[0].split(","):
+                    if match(tgt=tgt, host=h):
+                        yield h
 
 
 async def ssh(
@@ -117,9 +122,15 @@ def get_main_parser():
         help="target to connect",
     )
     parser.add_argument(
+        "--list",
+        dest="list",
+        default=None,
+        type=str,
+        help="list of target to connect",
+    )
+    parser.add_argument(
         "--cmd",
         dest="cmd",
-        default=None,
         help="cmd",
     )
     parser.add_argument(
@@ -154,7 +165,7 @@ async def main() -> None:
     hosts = []
     sem = asyncio.Semaphore(args.parallelism)
 
-    async for h in find_host(tgt=args.tgt, hostkey_file=args.hostkey):
+    async for h in find_host(tgt=args.tgt, list=args.list, hostkey_file=args.hostkey):
         if h in hosts:
             #skip duplicate
             continue
