@@ -130,6 +130,7 @@ def get_main_parser():
     )
     parser.add_argument(
         "--cmd",
+        default=None,
         dest="cmd",
         help="cmd",
     )
